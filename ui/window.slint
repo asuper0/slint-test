@@ -1,0 +1,291 @@
+import { StyleMetrics, CheckBox, Button, TabWidget, LineEdit, ComboBox, GridBox, VerticalBox, HorizontalBox, Slider, Switch} from "std-widgets.slint";
+
+export struct  PtzSpeed {
+    pan: float,
+    tilt: float,
+    zoom: float,
+}
+export struct  PtzPosition {
+    pan: float,
+    tilt: float,
+    zoom: float,
+}
+
+export struct PtzAction {
+    name: string,
+    index: int,
+    pan: int,
+    tilt: int,
+    zoom: int,
+}
+
+export struct CameraInfo {
+    url: string,
+    username: string,
+    password: string,
+    connected: bool,
+}
+
+export enum AsyncEvent {
+    open-camera,
+    close-camera,
+}
+
+export global PtzStatus {
+    in-out property <PtzSpeed> speed : {pan: 0.5, tilt: 0.5, zoom: 0.5};
+    in-out property <PtzPosition> position;
+    in-out property <CameraInfo> camera-info;
+    in-out property <bool> axis-range-01 : true;
+
+    callback ContinuousMove(PtzAction, PtzSpeed);
+    callback AbsoluteMove(PtzPosition, PtzSpeed, bool);
+    callback RelativeMove(PtzPosition, PtzSpeed, bool);
+    callback GetPtz();
+    callback open-camera(CameraInfo);
+    callback close-camera();
+}
+
+global Styles {
+    out property <color> panel-background : #efefef;
+    out property <color> button-background : #b4beeb;
+}
+component RoundBox inherits Rectangle{
+    // border-width : 1px;
+    // border-color: gray;
+    border-radius: 9px;
+    background: Styles.panel-background;
+}
+
+component PtzPanel inherits Rectangle {
+    in-out property <bool> enabled;
+    // min-height: 650px;
+    property <length> item-spacing : 6px;
+    property <length> item-padding : 8px;
+
+    property <[PtzAction]> pan-tilt-actions : [
+        {name: "Up",index: 1,pan: 0,tilt: 1,zoom: 0} ,
+        {name: "Down",index: 7,pan: 0,tilt: -1,zoom: 0} ,
+        {name: "Left",index: 3,pan: -1,tilt: 0,zoom: 0} ,
+        {name: "Right",index: 5,pan: 1,tilt: 0,zoom: 0} ,
+        {name: "Stop",index: 4,pan: 0,tilt: 0,zoom: 0} ,
+        {name: "Up Left",index: 0,pan: -1,tilt: 1,zoom: 0} ,
+        {name: "Up Right",index: 2,pan: 1,tilt: 1,zoom: 0} ,
+        {name: "Down Left",index: 6,pan: -1,tilt: -1,zoom: 0} ,
+        {name: "Down Right",index: 8,pan: 1,tilt: -1,zoom: 0} ,
+    ];
+
+    property <[PtzAction]> zoom-actions : [
+        {name: "Zoom In",index: 0,pan: 0,tilt: 0,zoom: 1} ,
+        {name: "Zoom Out",index: 1,pan: 0,tilt: 0,zoom: -1} ,
+    ];
+
+    HorizontalBox { 
+        // Switch { text: "test 0";}
+        spacing: 20px;
+        RoundBox {
+            min-width: 240px;
+            for act in pan-tilt-actions : Button {
+                text: act.name;
+                enabled: root.enabled;
+                x : (self.width + root.item-spacing )* Math.mod(act.index, 3) + root.item-padding;
+                y : (self.height + root.item-spacing) *Math.floor(act.index / 3) + root.item-padding;
+                width: (parent.width - root.item-padding *2 - root.item-spacing*2)/3;
+                height: (parent.height - root.item-padding *2 - root.item-spacing*2)/3;
+                clicked => { PtzStatus.ContinuousMove(act, PtzStatus.speed); }
+            }
+        }
+
+        VerticalBox {
+            // Rectangle { Switch { text: "test 1";} }
+            RoundBox {
+                // border-color: black;
+                // border-width: 1px;
+                min-height: 48px;
+                // Switch { text: "test 2";}
+                for act in zoom-actions : Button {
+                    text: act.name;
+                    enabled: root.enabled;
+                    x : (self.width + root.item-spacing )* act.index + root.item-padding;
+                    y : root.item-padding;
+                    width: (parent.width - root.item-padding * 2 - root.item-spacing)/2;
+                    height: (parent.height - root.item-padding *2);
+                    // height: 48px;
+                    clicked => { PtzStatus.ContinuousMove(act, PtzStatus.speed); }
+                }
+            }
+
+            RoundBox {
+                GridBox {
+                    Row{
+                        Text {text: "speed";}
+                    }
+                    Row{
+                        Text {text: "Pan:";}
+                        pan-speed-slider := Slider { maximum: 1; value: 0.5; changed => { PtzStatus.speed.pan = self.value; }}
+                        Text {text: Math.round(pan-speed-slider.value * 100) / 100; width: 40px;}
+                    }
+                    Row{
+                        Text {text: "Tilt:";}
+                        tilt-speed-slider := Slider { maximum: 1; value: 0.5; changed => { PtzStatus.speed.tilt = self.value; }}
+                        Text {text: Math.round(tilt-speed-slider.value * 100) / 100; width: 40px;}
+                    }
+                    Row{
+                        Text {text: "Zoom:";}
+                        zoom-speed-slider := Slider { maximum: 1; value: 0.5; changed => { PtzStatus.speed.zoom = self.value; }}
+                        Text {text: Math.round(zoom-speed-slider.value * 100) / 100; width: 40px;}
+                    }
+                }
+            }
+
+            RoundBox {
+                GridBox {
+                    Row{
+                        // Rectangle {
+                            Switch {
+                                text: "axis range [0,1]";
+                                checked: true;
+                                toggled => { PtzStatus.axis-range-01 = self.checked; }
+                            }
+                        // }
+                    }
+                    Row {
+                        absolute-move-btn := Button {
+                            text: "AbsoluteMove"; 
+                            clicked => {
+                                PtzStatus.AbsoluteMove({
+                                    pan: goto-pan-le.text.to-float(),
+                                    tilt: goto-tilt-le.text.to-float(),
+                                    zoom: goto-zoom-le.text.to-float(),
+                                }, 
+                                PtzStatus.speed,
+                                !PtzStatus.axis-range-01); 
+                            }
+                        }
+                        relative-move-btn := Button {
+                            text: "RelativeMove"; 
+                            clicked => {
+                                PtzStatus.RelativeMove({
+                                    pan: goto-pan-le.text.to-float(),
+                                    tilt: goto-tilt-le.text.to-float(),
+                                    zoom: goto-zoom-le.text.to-float(),
+                                },
+                                PtzStatus.speed,
+                                !PtzStatus.axis-range-01); 
+                            }
+                        }
+                    }
+                    Row {
+                        Text {text: "Pan:";}
+                        goto-pan-le := LineEdit { accepted => { absolute-move-btn.clicked(); }}
+                    }
+                    Row {
+                        Text {text: "Tilt:";}
+                        goto-tilt-le := LineEdit { accepted => { absolute-move-btn.clicked(); }}
+                    }
+                    Row {
+                        Text {text: "Zoom:";}
+                        goto-zoom-le := LineEdit { accepted => { absolute-move-btn.clicked(); }}
+                    }
+                }
+            }
+
+            RoundBox {
+                GridBox {
+                    Row {
+                        Text {text: "current";}
+                        Button {
+                            text: "query"; 
+                            clicked => {
+                                PtzStatus.GetPtz(); 
+                            }
+                        }
+                    }
+                    Row {
+                        Text {text: "Pan:";}
+                        LineEdit {text: PtzStatus.position.pan; enabled: false;}
+                    }
+                    Row {
+                        Text {text: "Tilt:";}
+                        LineEdit {text: PtzStatus.position.tilt; enabled: false;}
+                    }
+                    Row {
+                        Text {text: "Zoom:";}
+                        LineEdit {text: PtzStatus.position.zoom; enabled: false;}
+                    }
+                }
+            }
+        }
+    }
+
+}
+
+export component TestCase {
+    HorizontalBox {
+        VerticalBox {
+            Rectangle {
+    GridBox {
+        Row {
+            Switch {
+                colspan: 2;
+                text: "axis range [0,1]";
+                checked: true;
+            }
+        }
+        Row {
+            Button { text: "test"; }
+            Button { text: "test"; }
+        }
+        Row {
+            Text { text: "test"; }
+            LineEdit { }
+        }
+    }
+}}}
+}
+
+export component MainWindow inherits Window{
+    title: "Onvif Ptz Demo";
+    default-font-size: 18px;
+    default-font-weight: 400;
+
+    preferred-width: 600px;
+    preferred-height: 320px;
+
+    in-out property <[string]> device-urls;
+
+    property <bool> is-open;
+
+    VerticalBox {
+        HorizontalBox {
+            // spacing: 8px;
+            height: 48px;
+
+            Text {text: "url:"; vertical-alignment: center;}
+            url-cb := ComboBox{ model <=> root.device-urls; min-width : parent.width * 40%;}
+            Button { text: "Search"; clicked => {  } }
+        }
+        HorizontalBox {
+            Text {text: "username:"; vertical-alignment: center;}
+            username-le := LineEdit{text: ""; }
+            Text {text: "password:"; vertical-alignment: center;}
+            password-le := LineEdit{text: ""; }
+
+            open-camera-btn := Button {
+                text: root.is-open ? "close": "open"; 
+                width: parent.width * 10%;
+                clicked => {
+                    if (root.is-open) {
+                        PtzStatus.close-camera();
+                        root.is-open = false;
+                    } else {
+                        PtzStatus.camera-info = {url: url-cb.current-value, username: username-le.text, password: password-le.text };
+                        self.enabled = false;
+                        PtzStatus.open-camera(PtzStatus.camera-info)
+                    }
+                } 
+            }
+        }
+
+        PtzPanel { enabled: root.is-open;}
+    }
+}
